@@ -1,3 +1,6 @@
+#ifndef __IBUS_ENGINE_GUI_CI_COMMON_H_
+#define __IBUS_ENGINE_GUI_CI_COMMON_H_
+
 #include <ibus.h>
 
 typedef struct _IBusCIKey IBusCIKey;
@@ -11,9 +14,9 @@ typedef struct _IBusCICases IBusCICases;
  * The key is sent to @IBusEngineClass.process_key_event()
  */
 struct _IBusCIKey {
-    guint               keyval;
-    guint               keycode;
-    guint               state;
+    guint keyval;
+    guint keycode;
+    guint state;
 };
 
 /**
@@ -30,7 +33,7 @@ struct _IBusCIKeySequence {
     char *type;
     union {
         char *string;
-        const IBusCIKey *keys;
+        IBusCIKey *keys;
     } value;
 };
 
@@ -46,10 +49,10 @@ struct _IBusCIKeySequence {
  */
 struct _IBusCITest {
     char *desc;
-    IBusCIKeySequence preedit;
-    IBusCIKeySequence conversion;
-    IBusCIKeySequence commit;
-    IBusCIKeySequence result;
+    IBusCIKeySequence *preedit;
+    IBusCIKeySequence *conversion;
+    IBusCIKeySequence *commit;
+    IBusCIKeySequence *result;
 };
 
 /**
@@ -67,3 +70,4 @@ struct _IBusCICases {
     const IBusCITest *tests;
 };
 
+#endif

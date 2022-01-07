@@ -48,7 +48,7 @@ test_execs_PROGRAMS = $(TESTS)
 test_execsdir = $(libexecdir)/installed-tests/@ENGINE_NAME@
 
 # _SOURCES does not support substitution @_SOURCES@
--include Makefile-sources.am
+include Makefile-sources
 
 ibus_engine_gui_ci_SOURCES = \
     $(ENGINE_SOURCES) \
@@ -72,12 +72,13 @@ ibus_engine_gui_ci_LDADD = \
 EXTRA_DIST = \
     $(test_metas_in) \
     enginetmpl.c \
+    enginetmpl.h \
     keystrtoval.h \
     keystrtoval.py \
     runtest \
     $(NULL)
 CLEANFILES = \
-    @ENGINE_SRCFILES@ \
+    $(ENGINE_SOURCES) \
     $(test_metas) \
     engine.c \
     $(NULL)
@@ -95,6 +96,7 @@ $(test_metas): $(test_metas_in) $(test_programs)
 @ENGINE_SRCFILES@: guitest.h
 	if test "x$(ENGINE_SRCFILESDIR)" = "x$(srcdir)" ; then \
 	    cp -p enginetmpl.c engine.c; \
+	    cp -p enginetmpl.h engine.h; \
 	elif test -f  @ENGINE_SRCFILESDIR@/$@ ; then \
 	    cp -p @ENGINE_SRCFILESDIR@/$@ .; \
 	else \

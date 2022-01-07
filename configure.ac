@@ -75,13 +75,17 @@ AC_ARG_WITH(engine-srcfiles,
            [AC_HELP_STRING([--with-engine-srcfiles=SRCFILE],
                            [engine source files])],
            [ENGINE_SRCFILES="$withval"],
-           [ENGINE_SRCFILES='engine.c'])
+           [ENGINE_SRCFILES='engine.c engine.h'])
+if test "x${ENGINE_SRCFILES}" != "xengine.c engine.h" ; then
+    echo "ENGINE_SOURCES = ${ENGINE_SRCFILES}" > Makefile-sources.tmp
+    mv Makefile-sources.tmp Makefile-sources
+fi
 AC_SUBST(ENGINE_SRCFILES)
 
 AC_ARG_WITH(engine-srcfilesdir,
            [AC_HELP_STRING([--with-engine-srcfilesdir=SRCFILEDIR],
                            [directory path of engine source files])],
-           [ENGINE_SRCFILLESDIR="$withval"],
+           [ENGINE_SRCFILESDIR="$withval"],
            [ENGINE_SRCFILESDIR='$(srcdir)'])
 AC_SUBST(ENGINE_SRCFILESDIR)
 
@@ -109,7 +113,7 @@ AC_ARG_WITH(engine-type,
            [AC_HELP_STRING([--with-engine-type=TYPE],
                            [engine GType. default is ibus_engine_get_type()])],
            [ENGINE_TYPE="$withval"],
-           [ENGINE_TYPE='ibus_engine_get_type()'])
+           [ENGINE_TYPE='ibus_engine_ci_simple_get_type()'])
 AC_DEFINE_UNQUOTED(IBUS_TYPE_ENGINE_CI, $ENGINE_TYPE,
 		   [an engine GType in external ENGINE_SRCFILES])
 

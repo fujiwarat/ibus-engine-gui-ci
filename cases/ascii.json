@@ -23,10 +23,22 @@
         "conversion": {},
         "commit": { "keys":
           [
-            { "keyval": "IBUS_KEY_space", "keycode": "0", "state": "0" }
+            { "keyval": "IBUS_KEY_Return", "keycode": "0", "state": "0" }
           ]
         },
-        "result": { "string": "This is a test. " }
+        "result": { "string": "This is a test." }
+      }
+    },
+    {
+      "test2": {
+        "preedit": { "string": "This is a test2." },
+        "conversion": {},
+        "commit": { "keys":
+          [
+            { "keyval": "IBUS_KEY_Return", "keycode": "0", "state": "0" }
+          ]
+        },
+        "result": { "string": "This is a test2." }
       }
     }
   ]
