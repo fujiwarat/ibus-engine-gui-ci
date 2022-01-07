@@ -125,6 +125,7 @@ dnl - OUTPUT files
 dnl - OUTPUT files
 AC_CONFIG_FILES([
 Makefile
+cases/Makefile
 ibus-engine-gui-ci.spec
 ])
 
