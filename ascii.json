@@ -1,0 +1,33 @@
+{
+  "component": {
+    "name": "org.freedesktop.IBus.Engine.CI",
+    "description": "Engine CI Component",
+    "version": "1.5.13",
+    "author": "Takao Fujiwara &lt;takao.fujiwara1@gmail.com&gt;",
+    "license": "GPL",
+    "homepage": "https://github.com/ibus/ibus/wiki",
+    "textdomain": "ibus-engine-gui-ci"
+  },
+  "engine": {
+    "name": "ibus-engine-gui-ci"
+  },
+  "init": { "keys":
+    [ 
+      { "keyval": "IBUS_KEY_j", "keycode": "0", "state": "IBUS_CONTROL_MASK" }
+    ]
+  },
+  "tests": [
+    {
+      "test1": {
+        "preedit": { "string": "This is a test." },
+        "conversion": {},
+        "commit": { "keys":
+          [
+            { "keyval": "IBUS_KEY_space", "keycode": "0", "state": "0" }
+          ]
+        },
+        "result": { "string": "This is a test. " }
+      }
+    }
+  ]
+}

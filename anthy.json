@@ -1,0 +1,33 @@
+{
+  "component": {
+    "name": "org.freedesktop.IBus.Anthy.CI",
+    "description": "Anthy Component",
+    "version": "1.5.13",
+    "author": "Peng Huang &lt;shawn.p.huang@gmail.com&gt;",
+    "license": "GPL",
+    "homepage": "https://github.com/ibus/ibus/wiki",
+    "textdomain": "ibus-anthy"
+  },
+  "engine": {
+    "name": "ibus-ci-anthy"
+  },
+  "init": { "keys":
+    [
+      { "keyval": "IBUS_KEY_j", "keycode": "0", "state": "IBUS_CONTROL_MASK" }
+    ]
+  },
+  "tests": [
+    {
+      "test1": {
+        "preedit": { "string": "watashinonamaeha,pendesu." },
+        "conversion": { "string": " " },
+        "commit": { "keys":
+          [
+            { "keyval": "IBUS_KEY_Return", "keycode": "0", "state": "0" }
+          ]
+        },
+        "result": { "string": "私の名前は、ペンです。" }
+      }
+    }
+  ]
+}

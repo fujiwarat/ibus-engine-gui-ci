@@ -1,0 +1,25 @@
+#!/bin/bash
+
+: ${top_builddir:=../..}
+: ${top_srcdir:=../..}
+: ${builddir:=.}
+: ${srcdir:=.}
+: ${DISABLE_GUI_TESTS:=''}
+
+ibus-daemon --xim --panel disable --config disable &
+sleep 30
+
+tst=$1
+
+for t in $DISABLE_GUI_TESTS; do
+    if test $t = `basename $tst`; then
+        exit 77
+    fi
+done
+
+$builddir/$tst
+retval=$?
+
+ibus exit
+
+exit $retval
