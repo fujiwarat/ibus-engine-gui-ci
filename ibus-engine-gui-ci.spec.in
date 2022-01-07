@@ -4,10 +4,10 @@ Name:       @PACKAGE_NAME@
 Version:    @PACKAGE_VERSION@
 Release:    1%{?dist}
 Summary:    GUI CI for IBus engines
-License:    GPLv2+
+License:    LGPLv2+
 Group:      System Environment/Libraries
-URL:        http://code.google.com/p/input-pad/
-Source0:    http://input-pad.googlecode.com/files/%{name}-%{version}.tar.gz
+URL:        https://github.com/fujiwarat/ibus-engine-gui-ci
+Source0:    https://github.com/fujiwarat/ibus-engine-gui-ci/releases/download/%{version}/%{name}-%{version}.tar.gz
 
 BuildRoot:  %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
