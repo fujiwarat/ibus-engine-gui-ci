@@ -27,11 +27,7 @@
   "engine": {
     "name": "ibus-engine-gui-ci"
   },
-  "init": { "keys":
-    [ 
-      { "keyval": "IBUS_KEY_j", "keycode": "0", "state": "IBUS_CONTROL_MASK" }
-    ]
-  },
+  "init": {},
   "tests": [
     {
       "test1": {

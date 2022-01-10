@@ -39,6 +39,10 @@ GType               ibus_engine_ci_config_get_type   (void);
 IBusEngineCIConfig *ibus_engine_ci_config_new_from_file
                                                      (const char      *filename,
                                                          GError      **error);
+IBusComponent *     ibus_engine_ci_config_get_component
+                                                     (IBusEngineCIConfig *self);
+IBusEngineDesc *    ibus_engine_ci_config_get_engine_desc
+                                                     (IBusEngineCIConfig *self);
 IBusCIKeySequence * ibus_engine_ci_config_get_init   (IBusEngineCIConfig *self);
 IBusCITest *        ibus_engine_ci_config_get_tests  (IBusEngineCIConfig *self);
 

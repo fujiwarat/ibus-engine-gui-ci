@@ -32,7 +32,8 @@ struct _IBusCIKey {
 struct _IBusCIKeySequence {
     char *type;
     union {
-        char *string;
+        char      *string;
+        char     **strings;
         IBusCIKey *keys;
     } value;
 };

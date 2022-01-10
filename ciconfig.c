@@ -255,13 +255,14 @@ ibus_component_new_from_json_reader (JsonReader *reader,
     const GError *parse_error = NULL;
     int i;
     const char *key;
-    const char *name;
-    const char *description = NULL;
-    const char *version = NULL;
-    const char *author = NULL;
-    const char *license = NULL;
-    const char *homepage = NULL;
-    const char *textdomain = NULL;
+    const char *name = NULL;
+    const char *description = "";
+    const char *version = "";
+    const char *author = "";
+    const char *license = "";
+    const char *homepage = "";
+    const char *textdomain = "";
+    const char *command_line = "";
 
 #define GET_COMPONENT_VALUE(Key) \
         if (!g_strcmp0 (key, #Key)) \
@@ -276,6 +277,7 @@ ibus_component_new_from_json_reader (JsonReader *reader,
                 "license", "GPL",
                 "homepage", "https://github.com/ibus/ibus/wiki",
                 "textdomain", "ibus-engine-gui-ci",
+                "command-line", "",
                 NULL);
     }
     if ((parse_error = json_reader_get_error (reader)))
@@ -296,6 +298,7 @@ ibus_component_new_from_json_reader (JsonReader *reader,
         else GET_COMPONENT_VALUE (license)
         else GET_COMPONENT_VALUE (homepage)
         else GET_COMPONENT_VALUE (textdomain)
+        else GET_COMPONENT_VALUE (command_line)
         else {
             g_warning ("JsonReader does not support key %s for IBusComponent",
                        key);
@@ -314,16 +317,15 @@ ibus_component_new_from_json_reader (JsonReader *reader,
         }
         return NULL;
     }
-#define COMPONENT_NEW_ARG1(Key) (#Key), (Key) ? (Key) : ""
     return ibus_component_new_varargs ("name", name,
-                                       COMPONENT_NEW_ARG1 (description),
-                                       COMPONENT_NEW_ARG1 (version),
-                                       COMPONENT_NEW_ARG1 (author),
-                                       COMPONENT_NEW_ARG1 (license),
-                                       COMPONENT_NEW_ARG1 (homepage),
-                                       COMPONENT_NEW_ARG1 (textdomain),
+                                       "description", description,
+                                       "version", version,
+                                       "author", author,
+                                       "license", license,
+                                       "homepage", homepage,
+                                       "textdomain", textdomain,
+                                       "command-line", command_line,
                                        NULL);
-#undef COMPONENT_NEW_ARG1
 
 parse_component_error:
     if (error)
@@ -346,6 +348,14 @@ ibus_engine_desc_new_from_json_reader (JsonReader *reader,
     int i;
     const char *key;
     const char *name = NULL;
+    const char *longname = "";
+    const char *description = "";
+    const char *language = "";
+    const char *license = "";
+    const char *author = "";
+    const char *icon = "";
+    const char *layout = "";
+    const char *layout_variant = "";
 
 #define GET_ENGINE_DESC_VALUE(Key) \
         if (!g_strcmp0 (key, #Key)) \
@@ -368,6 +378,14 @@ ibus_engine_desc_new_from_json_reader (JsonReader *reader,
         if ((parse_error = json_reader_get_error (reader)))
             goto parse_engine_desc_error;
         GET_ENGINE_DESC_VALUE (name)
+        else GET_ENGINE_DESC_VALUE (longname)
+        else GET_ENGINE_DESC_VALUE (description)
+        else GET_ENGINE_DESC_VALUE (language)
+        else GET_ENGINE_DESC_VALUE (license)
+        else GET_ENGINE_DESC_VALUE (author)
+        else GET_ENGINE_DESC_VALUE (icon)
+        else GET_ENGINE_DESC_VALUE (layout)
+        else GET_ENGINE_DESC_VALUE (layout_variant)
         else {
             g_warning ("JsonReader does not support key %s for IBusEngineDesc",
                        key);
@@ -386,11 +404,75 @@ ibus_engine_desc_new_from_json_reader (JsonReader *reader,
         }
         return NULL;
     }
-    return ibus_engine_desc_new_varargs ("name", name, NULL);
+    return ibus_engine_desc_new_varargs ("name", name,
+                                         "longname", longname,
+                                         "description", description,
+                                         "language", language,
+                                         "license", license,
+                                         "author", author,
+                                         "icon", icon,
+                                         "layout", layout,
+                                         "layout_variant", layout_variant,
+                                         NULL);
 
 parse_engine_desc_error:
     if (error)
         g_propagate_error (error, (GError *)parse_error);
+    return NULL;
+}
+
+
+static char **
+get_strings_from_json_reader (JsonReader *reader,
+                              const char *key_step,
+                              GError    **error)
+{
+    const GError *parse_error = NULL;
+    int nkeys_array, i;
+    char **strings = NULL;
+    const char *string;
+
+    if (!json_reader_is_array (reader)) {
+        if (error) {
+            g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
+                         "No arrays in '%s.keys' JSON.",
+                         key_step);
+        }
+        return NULL;
+    }
+    if ((parse_error = json_reader_get_error (reader)))
+        goto get_strings_error;
+    nkeys_array = json_reader_count_elements (reader);
+    if (nkeys_array > 0) {
+        if (!(strings = g_new0 (char *, nkeys_array + 1))) {
+            if (error) {
+                    g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
+                                 "Failed to alloc IBusCIKey in %s.%s.",
+                                 key_step, "strings");
+            }
+            return NULL;
+        }
+    }
+    for (i = 0; i < nkeys_array; i++) {
+        /* Start init.strings.[] or tests.[].test1.commit.strings.[] */
+        json_reader_read_element (reader, i);
+        if ((parse_error = json_reader_get_error (reader)))
+            goto get_strings_error;
+        string = json_reader_get_string_value (reader);
+        if ((parse_error = json_reader_get_error (reader)))
+            goto get_strings_error;
+        strings[i] = g_strdup (string);
+        json_reader_end_element (reader);
+        if ((parse_error = json_reader_get_error (reader)))
+            goto get_strings_error;
+    }
+
+    return strings;
+
+get_strings_error:
+    if (error)
+        g_propagate_error (error, (GError *)parse_error);
+    g_free (strings);
     return NULL;
 }
 
@@ -430,8 +512,8 @@ ibus_test_init_new_from_json_reader (JsonReader *reader,
     if (!nkey_types)
         return NULL;
     if (nkey_types > 1) {
-        g_warning ("Ignore the second 'string' or 'keys' in a step " \
-                   "'%s' JSON array", key_step);
+        g_warning ("Ignore the second 'string', 'strings',  or 'keys' in a " \
+                   "step '%s' JSON array", key_step);
     }
     if ((parse_error = json_reader_get_error (reader)))
         goto parse_test_init_error;
@@ -456,6 +538,15 @@ ibus_test_init_new_from_json_reader (JsonReader *reader,
         string = json_reader_get_string_value (reader);
         retval->type = g_strdup ("string");
         retval->value.string = g_strdup (string);
+    } else if (!g_strcmp0 (key_type, "strings")) {
+        char **strings = get_strings_from_json_reader (reader, key_step, error);
+        if (!strings) {
+            json_reader_end_member (reader);
+            g_free (retval);
+            return NULL;
+        }
+        retval->type = g_strdup ("strings");
+        retval->value.strings = strings;
     } else if (!g_strcmp0 (key_type, "keys")) {
         if (!json_reader_is_array (reader)) {
             if (error) {
@@ -800,11 +891,25 @@ main_member_error:
     if (error && parse_error)
         g_propagate_error (error, (GError *)parse_error);
 main_subcomponent_error:
-    g_clear_object (&component);
-    g_clear_object (&engine);
-    //g_clear_slist (&init, g_free);
     return retval;
 }
+
+
+IBusComponent *
+ibus_engine_ci_config_get_component (IBusEngineCIConfig *self)
+{
+    g_return_val_if_fail (self, NULL);
+    return g_object_ref (self->component);
+}
+
+
+IBusEngineDesc *
+ibus_engine_ci_config_get_engine_desc (IBusEngineCIConfig *self)
+{
+    g_return_val_if_fail (self, NULL);
+    return g_object_ref (self->engine);
+}
+
 
 IBusCIKeySequence *
 ibus_engine_ci_config_get_init (IBusEngineCIConfig *self)
@@ -812,6 +917,7 @@ ibus_engine_ci_config_get_init (IBusEngineCIConfig *self)
     g_return_val_if_fail (self, NULL);
     return self->init;
 }
+
 
 IBusCITest *
 ibus_engine_ci_config_get_tests (IBusEngineCIConfig *self)

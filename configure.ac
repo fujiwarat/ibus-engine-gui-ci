@@ -59,24 +59,24 @@ PKG_CHECK_MODULES(JSON_GLIB, [
 
 dnl - check engine properties
 AC_ARG_WITH(engine-name,
-           [AC_HELP_STRING([--with-engine-name=NAME],
-                           [engine name])],
-           [ENGINE_NAME="$withval"],
-           [ENGINE_NAME="ibus-engine"])
-AC_DEFINE_UNQUOTED(IBUS_ENGINE_CI_NAME, "$ENGINE_NAME", [engine name])
+            [AC_HELP_STRING([--with-engine-name=NAME],
+                            [engine name])],
+            [ENGINE_NAME="$withval"],
+            [ENGINE_NAME="$PACKAGE"])
+AC_SUBST(ENGINE_NAME)
 
-AC_ARG_WITH(compose-name,
-           [AC_HELP_STRING([--with-compose-name=NAME],
-                           [compose name])],
-           [COMPOSE_NAME="$withval"],
-           [COMPOSE_NAME="org.freedesktop.IBus.CI"])
-AC_DEFINE_UNQUOTED(IBUS_COMPOSE_CI_NAME, "$COMPOSE_NAME", [compose name])
+AC_ARG_WITH(engine-casefile,
+            [AC_HELP_STRING([--with-engine-casefile=CASEFILE.json],
+                            [engine caase file. Default is ascii.json])],
+            [ENGINE_CASEFILE="$withval"],
+            [ENGINE_CASEFILE='ascii.json'])
+AC_SUBST(ENGINE_CASEFILE)
 
 AC_ARG_WITH(engine-srcfiles,
-           [AC_HELP_STRING([--with-engine-srcfiles=SRCFILE],
-                           [engine source files])],
-           [ENGINE_SRCFILES="$withval"],
-           [ENGINE_SRCFILES='engine.c engine.h'])
+            [AC_HELP_STRING([--with-engine-srcfiles=SRCFILE],
+                            [engine source files])],
+            [ENGINE_SRCFILES="$withval"],
+            [ENGINE_SRCFILES='engine.c engine.h'])
 if test "x${ENGINE_SRCFILES}" != "xengine.c engine.h" ; then
     echo "ENGINE_SOURCES = ${ENGINE_SRCFILES}" > Makefile-sources.tmp
     mv Makefile-sources.tmp Makefile-sources
@@ -84,47 +84,67 @@ fi
 AC_SUBST(ENGINE_SRCFILES)
 
 AC_ARG_WITH(engine-srcfilesdir,
-           [AC_HELP_STRING([--with-engine-srcfilesdir=SRCFILEDIR],
-                           [directory path of engine source files])],
-           [ENGINE_SRCFILESDIR="$withval"],
-           [ENGINE_SRCFILESDIR='$(srcdir)'])
+            [AC_HELP_STRING([--with-engine-srcfilesdir=SRCFILEDIR],
+                            [directory path of engine source files])],
+            [ENGINE_SRCFILESDIR="$withval"],
+            [ENGINE_SRCFILESDIR='$(srcdir)'])
 AC_SUBST(ENGINE_SRCFILESDIR)
+
+PKG_CHECK_MODULES(ENGINE_GUI, [
+    gtk+-3.0
+])
 
 if test "${ENGINE_SRCFILESDIR}" = '$(srcdir)' ; then
     PKG_CHECK_MODULES(ENGINE, [
-        gtk+-3.0
+        gobject-2.0
     ])
 fi
 
 AC_ARG_WITH(engine-cflags,
-           [AC_HELP_STRING([--with-engine-cflags=CFLAGS],
-                           [engine CFLAGS])],
-           [ENGINE_CFLAGS="$withval"],
-           [ENGINE_CFLAGS="$ENGINE_CFLAGS"])
+            [AC_HELP_STRING([--with-engine-cflags=CFLAGS],
+                            [engine CFLAGS])],
+            [ENGINE_CFLAGS="$withval"],
+            [ENGINE_CFLAGS="$ENGINE_CFLAGS"])
 AC_SUBST(ENGINE_CFLAGS)
 
 AC_ARG_WITH(engine-libs,
-           [AC_HELP_STRING([--with-engine-libs=LIBS],
-                           [engine LIBS])],
-           [ENGINE_LIBS="$withval"],
-           [ENGINE_LIBS="$ENGINE_LIBS"])
+            [AC_HELP_STRING([--with-engine-libs=LIBS],
+                            [engine LIBS])],
+            [ENGINE_LIBS="$withval"],
+            [ENGINE_LIBS="$ENGINE_LIBS"])
 AC_SUBST(ENGINE_LIBS)
 
 AC_ARG_WITH(engine-type,
-           [AC_HELP_STRING([--with-engine-type=TYPE],
-                           [engine GType. default is ibus_engine_get_type()])],
-           [ENGINE_TYPE="$withval"],
-           [ENGINE_TYPE='ibus_engine_ci_simple_get_type()'])
+            [AC_HELP_STRING([--with-engine-type=TYPE],
+                            [engine GType. default is ibus_engine_get_type()])],
+            [ENGINE_TYPE="$withval"],
+            [ENGINE_TYPE='ibus_engine_ci_simple_get_type()'])
 AC_DEFINE_UNQUOTED(IBUS_TYPE_ENGINE_CI, $ENGINE_TYPE,
-		   [an engine GType in external ENGINE_SRCFILES])
+                   [an engine GType in external ENGINE_SRCFILES])
 
 AC_ARG_WITH(engine-init,
-           [AC_HELP_STRING([--with-engine-init=FUNC(bus)],
-                           [external engine init FUNC(bus). default is (bus)])],
-           [ENGINE_INIT="$withval"],
-           [ENGINE_INIT='(bus)'])
+            [AC_HELP_STRING([--with-engine-init=FUNC(bus)],
+                    [external engine init FUNC(bus). default is (bus)])],
+            [ENGINE_INIT="$withval"],
+            [ENGINE_INIT='(bus)'])
 AC_DEFINE_UNQUOTED(ibus_engine_ci_init(bus), $ENGINE_INIT,
                    [an engine init function in external ENGINE_SRCFILES])
+
+AC_ARG_WITH(engine-defines,
+            [AC_HELP_STRING([--with-engine-defines='VAR1=VAL1 VAR2=VAL2'],
+              [Define engine specific variable. e.g. LIBEXECDIR=/usrlibexec])]:,
+            [ENGINE_DEFINES="$withval"],
+            [ENGINE_DEFINES=''])
+for element in $ENGINE_DEFINES ; do
+    var=`echo $element | sed -e 's/\([[^=]]*\)=\(.*\)/\1/'`
+    val=`echo $element | sed -e 's/\([[^=]]*\)=\(.*\)/\2/'`
+    if ! test grep "^#undef $var" config.h.in >/dev/null 2>&1; then
+        echo  "#undef $var" >> config.h.in
+    fi
+    AC_MSG_NOTICE([Define "$var" as "$val"])
+    AC_DEFINE_UNQUOTED($var, "$val",
+            [Define engine specific variable in external ENGINE_SRCFILES])
+done
 
 dnl - OUTPUT files
 dnl - OUTPUT files
@@ -138,14 +158,16 @@ AC_OUTPUT
 echo "
                 ibus-engine-gui-ci version ibus_ci_version
 
-ENGINE_NAME                 \"$ENGINE_NAME\"
-COMPOSE_NAME                \"$COMPOSE_NAME\"
+ENGINE_NAME                 $ENGINE_NAME
+ENGINE_CASEFILE             $ENGINE_CASEFILE
 ENGINE_SRCFILES             $ENGINE_SRCFILES
 ENGINE_SRCFILESDIR          $ENGINE_SRCFILESDIR
 ENGINE_TYPE                 $ENGINE_TYPE
 ENGINE_INIT                 $ENGINE_INIT
 ENGINE_CFLAGS               $ENGINE_CFLAGS
 ENGINE_LIBS                 $ENGINE_LIBS
+ENGINE_GUI_CFLAGS           $ENGINE_GUI_CFLAGS
+ENGINE_GUI_LIBS             $ENGINE_GUI_LIBS
 IBUS_CFLAGS                 $IBUS_CFLAGS
 IBUS_LIBS                   $IBUS_LIBS
 JSON_GLIB_CFLAGS            $JSON_GLIB_CFLAGS

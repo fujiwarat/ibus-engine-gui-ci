@@ -61,11 +61,13 @@ ibus_engine_gui_ci_SOURCES = \
 ibus_engine_gui_ci_CFLAGS = \
     @IBUS_CFLAGS@ \
     @JSON_GLIB_CFLAGS@ \
+    @ENGINE_GUI_CFLAGS@ \
     @ENGINE_CFLAGS@ \
     $(NULL)
 ibus_engine_gui_ci_LDADD = \
     @IBUS_LIBS@ \
     @JSON_GLIB_LIBS@ \
+    @ENGINE_GUI_LIBS@ \
     @ENGINE_LIBS@ \
     $(NULL)
 
@@ -88,17 +90,22 @@ MAINTAINERCLEANFILES = \
 
 $(test_metas): $(test_metas_in) $(test_programs)
 	f=`echo $@ | sed -e 's/\.test//'`; \
-	TEST_EXEC=$(test_execsdir)/$$f; \
-	sed -e "s|@TEST_EXEC[@]|$$TEST_EXEC|g" $(test_metas_in) > $@.tmp; \
+	TEST_EXEC=$(test_execsdir)/$(test_execs); \
+	CASEFILE=$(test_sourcesdir)/$(ENGINE_CASEFILE); \
+	sed -e "s|@TEST_EXEC[@]|$$TEST_EXEC|g" \
+	sed -e "s|@CASEFILE[@]|$$CASEFILE|g" \
+	    $(test_metas_in) > $@.tmp; \
 	mv $@.tmp $@; \
 	$(NULL)
 
-@ENGINE_SRCFILES@: guitest.h
+@ENGINE_SRCFILES@:
 	if test "x$(ENGINE_SRCFILESDIR)" = "x$(srcdir)" ; then \
 	    cp -p enginetmpl.c engine.c; \
 	    cp -p enginetmpl.h engine.h; \
 	elif test -f  @ENGINE_SRCFILESDIR@/$@ ; then \
-	    cp -p @ENGINE_SRCFILESDIR@/$@ .; \
+	    for f in @ENGINE_SRCFILES@ ; do \
+	        cp -p @ENGINE_SRCFILESDIR@/$$f .; \
+	    done; \
 	else \
 	    abrt; \
 	fi;

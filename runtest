@@ -1,7 +1,7 @@
 #!/bin/bash
 
-: ${top_builddir:=../..}
-: ${top_srcdir:=../..}
+: ${top_builddir:=.}
+: ${top_srcdir:=.}
 : ${builddir:=.}
 : ${srcdir:=.}
 : ${DISABLE_GUI_TESTS:=''}
@@ -17,7 +17,7 @@ for t in $DISABLE_GUI_TESTS; do
     fi
 done
 
-$builddir/$tst
+$builddir/$tst --case-file $top_srcdir/cases/ascii.json
 retval=$?
 
 ibus exit

@@ -39,29 +39,40 @@ extern GType IBUS_TYPE_ENGINE_CI;
 
 IBusBus *m_bus;
 IBusEngine *m_engine;
-
-IBusKeymap *keymap;
+IBusKeymap *m_keymap;
 
 static GOptionContext *option_context;
 static GOptionGroup *option_gtk;
 static char *case_path;
 static char *config_dir;
 static char *exec_dir;
+static gboolean calc_keycode;
 static int test_index;
+static int num_preedit_changes;
+static int result_index;
+static gboolean rerun;
 
-static void show_version (void);
-static void show_help (void);
-static void show_help_gtk (void);
-static void show_help_test (void);
-static gboolean entry_focus_in_event_cb (GtkWidget     *entry,
-                                         GdkEventFocus *event,
-                                         gpointer       data);
+static void     show_version                 (void);
+static void     show_help                    (void);
+static void     show_help_gtk                (void);
+static void     show_help_test               (void);
+static void     ciengine_focus_in_cb         (IBusEngine    *engine,
+                                              gpointer       data);
+static void     ciengine_focus_out_cb        (IBusEngine    *engine,
+                                              gpointer       data);
+static gboolean entry_focus_in_event_cb      (GtkWidget     *entry,
+                                              GdkEventFocus *event,
+                                              gpointer       data);
+static gboolean entry_focus_out_event_cb     (GtkWidget     *entry,
+                                              GdkEventFocus *event,
+                                              gpointer       data);
 
 static const GOptionEntry entries[] = {
   { "version", 'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, show_version, "Show the application's version.", NULL },
   { "case-file", 'c', 0, G_OPTION_ARG_STRING, &case_path, "Specify an engine test CASEFILE with JSON", "CASEFILE" },
   { "configdir", 'C', 0, G_OPTION_ARG_STRING, &config_dir, "Specify CONFIGDIR", "CONFIGDIR" },
   { "execdir", 'B', 0, G_OPTION_ARG_STRING, &exec_dir, "Specify EXECDIR", "EXECDIR" },
+  { "calc-keycode", 'K', 0, G_OPTION_ARG_NONE, &calc_keycode, "Calculate keycode from keyval", NULL },
   { "help", '?', G_OPTION_FLAG_NO_ARG | G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_CALLBACK, show_help, "Show the help menu.", NULL },
   { "help-gtk", 0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, show_help_gtk, "Show the GTK help menu.", NULL },
   { "help-test", 0, G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK, show_help_test, "Show the GTest help menu.", NULL },
@@ -110,19 +121,32 @@ show_help_test (void)
 }
 
 
-static guint16 guess_keycode (IBusKeymap         *keymap,
-			      guint               keyval,
-			      guint32             modifiers)
+guint
+calculate_keycode_from_keyval (guint keyval)
 {
-    /* The IBusKeymap only have 256 entries here,
-       Use Brute Force method to get keycode from keyval. */
-    guint16 keycode = 0;
-    for (; keycode < 256; ++keycode) {
-	if (keyval == ibus_keymap_lookup_keysym (keymap, keycode, modifiers))
-	    return keycode;
+    GdkDisplay *display = gdk_display_get_default ();
+    GdkKeymap *keymap;
+    GdkKeymapKey *keys = NULL;
+    gint n_keys = 0;
+    guint keycode = 0;
+
+    /* Do not use g_return_val_if_fail(g_log) */
+    if (!display) {
+        g_printerr ("Failed to open display\n");
+        return 0;
     }
-    return 0;
+    keymap = gdk_keymap_get_for_display (display);
+    if (!keymap) {
+        g_printerr ("Failed to get keymap\n");
+        return 0;
+    }
+    if (gdk_keymap_get_entries_for_keyval (keymap, keyval, &keys, &n_keys))
+        keycode = keys->keycode;
+    else
+        g_printerr ("Failed to parse keycode from keyval %x\n", keyval);
+    return keycode;
 }
+
 
 static IBusEngine *
 create_engine_cb (IBusFactory *factory,
@@ -130,25 +154,30 @@ create_engine_cb (IBusFactory *factory,
                   gpointer     data)
 {
     static int i = 1;
-    gchar *engine_path =
+    g_autofree gchar *engine_path =
             g_strdup_printf ("/org/freedesktop/IBus/engine/ci/%d",
                              i++);
+    IBusEngineCIConfig *ciconfig = (IBusEngineCIConfig *)data;
 
+    if (g_test_verbose ())
+        g_printerr ("create_engine_cb\n");
     m_engine = ibus_engine_new_with_type (IBUS_TYPE_ENGINE_CI,
                                           name,
                                           engine_path,
                                           ibus_bus_get_connection (m_bus));
-    g_free (engine_path);
-
+    g_signal_connect (m_engine, "focus-in",
+                      G_CALLBACK (ciengine_focus_in_cb), ciconfig);
+    g_signal_connect (m_engine, "focus-out",
+                      G_CALLBACK (ciengine_focus_out_cb), ciconfig);
     return m_engine;
 }
 
 static gboolean
-register_ibus_engine ()
+register_ibus_engine (IBusEngineCIConfig *ciconfig)
 {
     IBusFactory *factory;
     IBusComponent *component;
-    IBusEngineDesc *desc;
+    IBusEngineDesc *engine_desc;
 
     m_bus = ibus_bus_new ();
     if (!ibus_bus_is_connected (m_bus)) {
@@ -157,27 +186,11 @@ register_ibus_engine ()
     }
     factory = ibus_factory_new (ibus_bus_get_connection (m_bus));
     g_signal_connect (factory, "create-engine",
-                      G_CALLBACK (create_engine_cb), NULL);
+                      G_CALLBACK (create_engine_cb), ciconfig);
 
-    component = ibus_component_new (
-            IBUS_COMPOSE_CI_NAME,
-            "Hangul Engine Test",
-            "1.5.1",
-            "GPL",
-            "Peng Huang <shawn.p.huang@gmail.com>",
-            "https://github.com/ibus/ibus/wiki",
-            "",
-            "ibus-hangul");
-    desc = ibus_engine_desc_new (
-            "hangultest",
-            "Hangul Test",
-            "Hangul Test",
-            "en",
-            "GPL",
-            "Peng Huang <shawn.p.huang@gmail.com>",
-            "ibus-hangul",
-            "us");
-    ibus_component_add_engine (component, desc);
+    component = ibus_engine_ci_config_get_component (ciconfig);
+    engine_desc = ibus_engine_ci_config_get_engine_desc (ciconfig);
+    ibus_component_add_engine (component, engine_desc);
     ibus_bus_register_component (m_bus, component);
 
     return TRUE;
@@ -191,38 +204,6 @@ finit (gpointer data)
     return FALSE;
 }
 
-static gboolean
-enable_ime (IBusEngineCIConfig *ciconfig)
-{
-    int i;
-    IBusCIKeySequence *init;
-    IBusCIKey *keys;
-
-    g_return_val_if_fail (ciconfig, FALSE);
-    init = ibus_engine_ci_config_get_init (ciconfig);
-    keys = init->value.keys;
-    if (!keys)
-        return FALSE;
-    if (keys->keyval == 0 && keys->keycode == 0)
-        return FALSE;
-    while (keys && keys->keyval != 0 && keys->keycode != 0) {
-        int keyval = keys->keyval;
-        int keycode = keys->keycode;
-        int state = keys->state;
-        gboolean retval = FALSE;
-
-        g_signal_emit_by_name (m_engine, "process-key-event",
-                               keyval, keycode, state, &retval);
-        state |= IBUS_RELEASE_MASK;
-        sleep(1);
-        g_signal_emit_by_name (m_engine, "process-key-event",
-                               keyval, keycode, state, &retval);
-        keys++;
-     }
-     return TRUE;
-}
-
-
 static int
 test_key_sequences_length (IBusCIKeySequence *sequence)
 {
@@ -230,6 +211,13 @@ test_key_sequences_length (IBusCIKeySequence *sequence)
     int i;
     if (!g_strcmp0 (sequence->type, "string")) {
         len = strlen (sequence->value.string);
+    } else if (!g_strcmp0 (sequence->type, "strings")) {
+        for (i = 0; i < G_MAXINT; i++) {
+            const char *string = sequence->value.strings[i];
+            if (!string)
+                break;
+            len += strlen (string);
+        }
     } else if (!g_strcmp0 (sequence->type, "keys")) {
         for (i = 0; i < G_MAXINT; i++) {
             guint keyval = sequence->value.keys[i].keyval;
@@ -249,18 +237,33 @@ test_key_sequences_case (IBusCIKeySequence *sequence,
                          const char        *desc)
 {
     int len, i;
+    int j = 0;
 
     if (desc)
         g_test_message ("Start %s test\n", desc);
-    len = test_key_sequences_length (sequence);
+    if (!(len = test_key_sequences_length (sequence)))
+        return FALSE;
     /* Run test cases */
     for (i = 0; i < len; i++) {
         guint keyval = 0;
         guint keycode = 0;
         guint state = 0;
+        gunichar ch;
         gboolean retval;
         if (!g_strcmp0 (sequence->type, "string")) {
             keyval = sequence->value.string[i];
+        } else if (!g_strcmp0 (sequence->type, "strings")) {
+            const char *string;
+            if (!sequence->value.strings[j])
+                break;
+            if (!sequence->value.strings[j][i]) {
+                ++j;
+                len -= i;
+                i = 0;
+                if (!sequence->value.strings[j])
+                    break;
+            }
+            keyval = sequence->value.strings[j][i];
         } else if (!g_strcmp0 (sequence->type, "keys")) {
             keyval = sequence->value.keys[i].keyval;
             keycode = sequence->value.keys[i].keycode;
@@ -268,6 +271,9 @@ test_key_sequences_case (IBusCIKeySequence *sequence,
         }
         if (keyval == 0 && keycode == 0 && state == 0)
             break;
+        if (calc_keycode)
+            keycode = calculate_keycode_from_keyval (keyval);
+        ch = ibus_keyval_to_unicode (keyval);
         g_signal_emit_by_name (m_engine, "process-key-event",
                                keyval, keycode, state, &retval);
         state |= IBUS_RELEASE_MASK;
@@ -275,6 +281,20 @@ test_key_sequences_case (IBusCIKeySequence *sequence,
         g_signal_emit_by_name (m_engine, "process-key-event",
                                keyval, keycode, state, &retval);
     }
+    return TRUE;
+}
+
+
+static gboolean
+enable_ime (IBusEngineCIConfig *ciconfig)
+{
+    int i;
+    IBusCIKeySequence *init;
+
+    g_return_val_if_fail (ciconfig, FALSE);
+    if (!(init = ibus_engine_ci_config_get_init (ciconfig)))
+        return FALSE;
+    return test_key_sequences_case (init, "init");
 }
 
 
@@ -284,9 +304,6 @@ set_engine_cb (GObject *object, GAsyncResult *res, gpointer data)
     IBusBus *bus = IBUS_BUS (object);
     GtkWidget *entry = GTK_WIDGET (data);
     g_autoptr(GError) error = NULL;
-    IBusEngineCIConfig *ciconfig;
-    IBusCITest *tests;
-    g_autofree gchar *desc = NULL;
 
     if (g_test_verbose ())
         g_printerr ("set_engine_cb\n");
@@ -296,8 +313,26 @@ set_engine_cb (GObject *object, GAsyncResult *res, gpointer data)
         g_test_incomplete (msg);
         return;
     }
+}
 
-    ciconfig = g_object_get_data (G_OBJECT (entry), "ciconfig");
+
+static void
+ciengine_focus_in_cb (IBusEngine *engine,
+                      gpointer    data)
+{
+    IBusEngineCIConfig *ciconfig = (IBusEngineCIConfig *)data;
+    IBusCITest *tests;
+    g_autofree gchar *desc = NULL;
+
+    if (g_test_verbose ())
+        g_printerr ("engine_focus_in_cb\n");
+    /* Workaround because focus-out resets the preedit text
+     * ibus_bus_set_global_engine() calls bus_input_context_set_engine()
+     * twice and it causes bus_engine_proxy_focus_out()
+     */
+    if (!rerun)
+        return;
+
     g_return_if_fail (IBUS_IS_ENGINE_CI_CONFIG (ciconfig));
     if (enable_ime (ciconfig))
         sleep (1);
@@ -308,23 +343,56 @@ set_engine_cb (GObject *object, GAsyncResult *res, gpointer data)
     test_key_sequences_case (tests[test_index].preedit, desc);
 }
 
+
+static void
+ciengine_focus_out_cb (IBusEngine *enigne,
+                      gpointer    data)
+{
+    if (g_test_verbose ())
+        g_printerr ("engine_focus_out_cb\n");
+    rerun = TRUE;
+}
+
+
 static gboolean
 entry_focus_in_event_cb (GtkWidget     *entry,
                          GdkEventFocus *event,
                          gpointer       data)
 {
+    IBusEngineCIConfig *ciconfig;
+    IBusEngineDesc *engine_desc = NULL;
+    const char *name;
+
     if (g_test_verbose ())
-        g_printerr ("focus_in_event_cb\n");
+        g_printerr ("entry_focus_in_event_cb\n");
     g_assert (m_bus != NULL);
+    g_assert (GTK_IS_ENTRY (entry));
+
+    ciconfig = g_object_get_data (G_OBJECT (entry), "ciconfig");
+    g_return_val_if_fail (ciconfig, FALSE);
+    engine_desc = ibus_engine_ci_config_get_engine_desc (ciconfig);
+    g_return_val_if_fail (engine_desc, FALSE);
+    name = ibus_engine_desc_get_name (engine_desc);
     ibus_bus_set_global_engine_async (m_bus,
-                                      "hangultest",
+                                      name,
                                       -1,
                                       NULL,
                                       set_engine_cb,
                                       entry);
+    g_object_unref (engine_desc);
     return FALSE;
 }
 
+
+static gboolean
+entry_focus_out_event_cb (GtkWidget     *entry,
+                          GdkEventFocus *event,
+                          gpointer       data)
+{
+    if (g_test_verbose ())
+        g_printerr ("entry_focus_out_event_cb\n");
+    return FALSE;
+}
 
 static void
 entry_preedit_changed_cb (GtkWidget  *entry,
@@ -338,7 +406,7 @@ entry_preedit_changed_cb (GtkWidget  *entry,
     g_autofree gchar *desc = NULL;
 
     if (g_test_verbose ()) {
-        g_printerr ("preedit_changed_cb %s\n",
+        g_printerr ("preedit_changed_cb \"%s\"\n",
                     preedit_str ? preedit_str : "(null)");
     }
     ciconfig = g_object_get_data (G_OBJECT (entry), "ciconfig");
@@ -350,7 +418,13 @@ entry_preedit_changed_cb (GtkWidget  *entry,
     if (!preedit)
         return;
     len = test_key_sequences_length (preedit);
-    if (len > strlen (preedit_str))
+    if (!len)
+        return;
+    ++num_preedit_changes;
+    /* preedit_str can be multi-byte chars and strlen(preedit_str) cannot be
+     * compared with len.
+     */
+    if (len != num_preedit_changes)
         return;
     desc = g_strdup_printf ("%s commit", tests[test_index].desc);
     test_key_sequences_case (tests[test_index].commit, desc);
@@ -376,6 +450,7 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
     IBusCITest *tests;
     gboolean valid_output = TRUE;
     const char *expected;
+    gboolean wait_next_commit_text = FALSE;
     const char *test;
     IBusCIKeySequence *preedit;
     g_autofree gchar *desc = NULL;
@@ -393,7 +468,13 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
     g_return_if_fail (IBUS_IS_ENGINE_CI_CONFIG (ciconfig));
     tests = ibus_engine_ci_config_get_tests (ciconfig);
     g_assert (tests);
-    expected = tests[test_index++].result->value.string;
+    if (!g_strcmp0 (tests[test_index].result->type, "string")) {
+        expected = tests[test_index].result->value.string;
+    } else if (!g_strcmp0 (tests[test_index].result->type, "strings")) {
+        expected = tests[test_index].result->value.strings[result_index++];
+        if (tests[test_index].result->value.strings[result_index])
+            wait_next_commit_text = TRUE;
+    }
     if (0 != g_strcmp0 (chars, expected))
         valid_output = FALSE;
     if (valid_output) {
@@ -402,8 +483,14 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
         test = RED "FAIL" NC;
         g_test_fail ();
     }
-    g_print ("%05d %s expected: %s typed: %s\n",
-             test_index, test, expected, chars);
+    g_print ("%05d %s expected: \"%s\" typed: \"%s\"\n",
+             test_index + 1, test, expected, chars);
+    if (wait_next_commit_text) {
+         return;
+    } else {
+         ++test_index;
+         result_index = 0;
+    }
 
     preedit = tests[test_index].preedit;
     if (!preedit) {
@@ -420,6 +507,7 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
     n_loop++;
 #endif
     gtk_entry_set_text (entry, "");
+    num_preedit_changes = 0;
     desc = g_strdup_printf ("%s preedit", tests[test_index].desc);
     test_key_sequences_case (preedit, desc);
 }
@@ -439,6 +527,8 @@ create_window (IBusEngineCIConfig *ciconfig)
                       G_CALLBACK (gtk_main_quit), NULL);
     g_signal_connect (entry, "focus-in-event",
                       G_CALLBACK (entry_focus_in_event_cb), NULL);
+    g_signal_connect (entry, "focus-out-event",
+                      G_CALLBACK (entry_focus_out_event_cb), NULL);
     g_signal_connect (entry, "preedit-changed",
                       G_CALLBACK (entry_preedit_changed_cb), NULL);
     buffer = gtk_entry_get_buffer (GTK_ENTRY (entry));
@@ -453,7 +543,7 @@ test_engine_ci (gconstpointer user_data)
 {
     IBusEngineCIConfig *ciconfig = (IBusEngineCIConfig *)user_data;
     GLogLevelFlags flags;
-    if (!register_ibus_engine ()) {
+    if (!register_ibus_engine (ciconfig)) {
         g_test_fail ();
         return;
     }
@@ -477,10 +567,12 @@ int
 main (int argc, char *argv[])
 {
     g_autoptr(GError) error = NULL;
-    gboolean arg_fails = FALSE;
+    int i;
+    gboolean has_help_option = FALSE;
     IBusEngineCIConfig *ciconfig;
     char *test_path;
 
+    //sleep (10);
     /* Run test cases with X Window. */
     g_setenv ("GDK_BACKEND", "x11", TRUE);
 
@@ -492,17 +584,22 @@ main (int argc, char *argv[])
 
     option_context = g_option_context_new ("- ibus-engine-gui-ci");
     g_option_context_add_main_entries (option_context, entries, "ibus-engine-gui-ci");
-    //option_gtk = gtk_get_option_group (TRUE);
     option_gtk = gtk_get_option_group (FALSE);
     g_option_context_add_group (option_context, option_gtk);
     g_option_context_set_help_enabled (option_context, FALSE);
 
-    g_test_init (&argc, &argv, NULL);
+    for (i = 1; i < argc; i++) {
+        if (!g_strcmp0 (argv[i], "--help") || !g_strcmp0 (argv[i], "-h")) {
+            has_help_option = TRUE;
+            break;
+        }
+    }
+    if (!has_help_option)
+        g_test_init (&argc, &argv, NULL);
     if (!g_option_context_parse (option_context, &argc, &argv, &error)) {
         g_printerr ("Option parsing failed: %s\n", error->message);
         exit (EXIT_FAILURE);
     }
-    gtk_init (&argc, &argv);
     if (!case_path) {
         g_printerr ("You have to specify --case-file option.\n");
         exit (EXIT_FAILURE);
@@ -518,6 +615,8 @@ main (int argc, char *argv[])
         exit (EXIT_FAILURE);
     }
 
+    /* Do not require to open Display until parse IBusEngineCIConfig */
+    gtk_init (&argc, &argv);
     test_path = g_strdup ("/ibus-engine-gui-ci/test1");
     g_test_add_data_func_full (test_path,
                                g_object_ref_sink (ciconfig),
@@ -525,7 +624,7 @@ main (int argc, char *argv[])
                                g_object_unref);
     g_free (test_path);
 
-    keymap = ibus_keymap_get("us");
+    //keymap = ibus_keymap_get("us");
 
     return g_test_run ();
 }

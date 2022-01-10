@@ -19,6 +19,10 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
 # USA
 
+test_sources_DATA = $(ENGINE_CASEFILE)
+test_sourcesdir = $(datadir)/installed-tests/@ENGINE_NAME@
+
 EXTRA_DIST = \
     ascii.json \
+    hangul.json \
     $(NULL)
