@@ -477,6 +477,100 @@ get_strings_error:
 }
 
 
+static IBusCIKey *
+get_keys_from_json_reader (JsonReader *reader,
+                           const char *key_step,
+                           GError    **error)
+{
+    const GError *parse_error = NULL;
+    int nkeys_array, i, j;
+    IBusCIKey *cikey = NULL;
+    g_autofree gchar **keys = NULL;
+    const char *key;
+
+#define GET_KEYS_VALUE(Key) \
+        if (!g_strcmp0 (key, #Key)) \
+            Key = json_reader_get_string_value (reader);
+
+    if (!json_reader_is_array (reader)) {
+        if (error) {
+                g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
+                             "No arrays in '%s.keys' JSON.",
+                             key_step);
+        }
+        return NULL;
+    }
+    if ((parse_error = json_reader_get_error (reader)))
+        goto get_keys_error;
+    nkeys_array = json_reader_count_elements (reader);
+    if (nkeys_array > 0) {
+        if (!(cikey = g_new0 (IBusCIKey, nkeys_array + 1))) {
+            if (error) {
+                g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
+                             "Failed to alloc IBusCIKey in %s.%s.",
+                             key_step, "keys");
+            }
+            return NULL;
+        }
+    }
+    for (i = 0; i < nkeys_array; i++) {
+        const char *keyval = NULL;
+        const char *keycode = NULL;
+        const char *state = NULL;
+
+        /* Start init.keys.[] or tests.[].test1.commit.keys.[] */
+        json_reader_read_element (reader, i);
+        if ((parse_error = json_reader_get_error (reader)))
+            goto get_keys_error;
+        if (!json_reader_count_members (reader)) {
+            /* key_step."keys".[] is found but no keys */
+            json_reader_end_element (reader);
+            break;
+        }
+        if ((parse_error = json_reader_get_error (reader)))
+            goto get_keys_error;
+        keys = json_reader_list_members (reader);
+        if ((parse_error = json_reader_get_error (reader)))
+            goto get_keys_error;
+        g_assert (keys);
+        for (j = 0; keys[j]; j++) {
+            key = keys[j];
+            /* Start init.keys.[].keyval or
+             * tests.[].test1.commit.keys.[].keyval
+             */
+            json_reader_read_member (reader, key);
+            if ((parse_error = json_reader_get_error (reader)))
+                goto get_keys_error;
+            GET_KEYS_VALUE(keyval)
+            else GET_KEYS_VALUE(keycode)
+            else GET_KEYS_VALUE(state)
+            else {
+                g_warning ("Key %s should be keyval, keycode or state in "
+                           "'%s' JSON.", key, key_step);
+            }
+            /* End init.keys.[].keyval or
+             * tests.[].test1.commit.keys.[].keyval
+             */
+            json_reader_end_member (reader);
+        }
+        /* End init.keys.[] or tests.[].test1.commit.keys.[] */
+        json_reader_end_element (reader);
+        cikey[i].keyval = keyval_str_to_val (keyval);
+        cikey[i].keycode = number_str_to_val (keycode);
+        cikey[i].state = state_str_to_val (state);
+    }
+    return cikey;
+
+#undef GET_KEYS_VALUE
+
+get_keys_error:
+    if (error)
+        g_propagate_error (error, (GError *)parse_error);
+    g_free (cikey);
+    return NULL;
+}
+
+
 /**
  * ibus_test_init_new_from_json_reader:
  *
@@ -490,38 +584,20 @@ ibus_test_init_new_from_json_reader (JsonReader *reader,
 {
     IBusCIKeySequence *retval = NULL;
     const GError *parse_error = NULL;
-    int nkey_types, i, j;
+    int nkey_types, i;
     g_autofree gchar **key_types = NULL;
     const char *key_type;
-    const char *string = NULL;
-    int nkeys_array;
-    int nkeys;
-    g_autofree gchar **keys = NULL;
-    const char *key;
-    const char *keyval;
-    const char *keycode;
-    const char *state;
-    IBusCIKey *cikey = NULL;
-
-#define GET_TEST_INIT_VALUE(Key) \
-        if (!g_strcmp0 (key, #Key)) \
-            Key = json_reader_get_string_value (reader);
 
     nkey_types = json_reader_count_members (reader);
     /* No init keys */
     if (!nkey_types)
         return NULL;
-    if (nkey_types > 1) {
-        g_warning ("Ignore the second 'string', 'strings',  or 'keys' in a " \
-                   "step '%s' JSON array", key_step);
-    }
     if ((parse_error = json_reader_get_error (reader)))
         goto parse_test_init_error;
     key_types = json_reader_list_members (reader);
     if ((parse_error = json_reader_get_error (reader)))
         goto parse_test_init_error;
     g_assert (key_types);
-    key_type = key_types[0];
     if (!(retval = g_new0 (IBusCIKeySequence, 1))) {
         if (error) {
             g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
@@ -530,127 +606,65 @@ ibus_test_init_new_from_json_reader (JsonReader *reader,
         }
         return NULL;
     }
-    /* Start init.keys or tests.[].test1.commit.keys */
-    json_reader_read_member (reader, key_type);
-    if ((parse_error = json_reader_get_error (reader)))
-        goto parse_test_init_error;
-    if (!g_strcmp0 (key_type, "string")) {
-        string = json_reader_get_string_value (reader);
-        retval->type = g_strdup ("string");
-        retval->value.string = g_strdup (string);
-    } else if (!g_strcmp0 (key_type, "strings")) {
-        char **strings = get_strings_from_json_reader (reader, key_step, error);
-        if (!strings) {
-            json_reader_end_member (reader);
-            g_free (retval);
-            return NULL;
-        }
-        retval->type = g_strdup ("strings");
-        retval->value.strings = strings;
-    } else if (!g_strcmp0 (key_type, "keys")) {
-        if (!json_reader_is_array (reader)) {
-            if (error) {
-                g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
-                             "No arrays in '%s.keys' JSON.",
-                             key_step);
-            }
-            g_free (retval);
-            return NULL;
-        }
+    retval->length = -1;
+    for (i = 0; key_types[i]; ++i) {
+        key_type = key_types[i];
+        /* Start init.keys or tests.[].test1.commit.keys */
+        json_reader_read_member (reader, key_type);
         if ((parse_error = json_reader_get_error (reader)))
             goto parse_test_init_error;
-        nkeys_array = json_reader_count_elements (reader);
-        if (nkeys_array > 0) {
-            if (!(cikey = g_new0 (IBusCIKey, nkeys_array + 1))) {
-                if (error) {
-                    g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
-                                 "Failed to alloc IBusCIKey in %s.%s.",
-                                 key_step, key_type);
-                }
+        if (!g_strcmp0 (key_type, "string")) {
+            const char *string = json_reader_get_string_value (reader);
+            retval->type = g_strdup ("string");
+            retval->value.string = g_strdup (string);
+        } else if (!g_strcmp0 (key_type, "strings")) {
+            char **strings = get_strings_from_json_reader (reader,
+                                                           key_step,
+                                                           error);
+            if (!strings) {
                 json_reader_end_member (reader);
                 g_free (retval);
                 return NULL;
             }
-        }
-        retval->type = g_strdup ("keys");
-        retval->value.keys = cikey;
-        for (i = 0; i < nkeys_array; i++) {
-            keyval = NULL;
-            keycode = NULL;
-            state = NULL;
-            /* Start init.keys.[] or tests.[].test1.commit.keys.[] */
-            json_reader_read_element (reader, i);
-            if ((parse_error = json_reader_get_error (reader)))
-                goto parse_test_init_error;
-            if (!json_reader_count_members (reader)) {
-                /* key_step."keys".[] is found but no keys */
-                json_reader_end_element (reader);
-                g_clear_pointer (&retval->value.keys, g_free);
-                break;
-            }
-            if ((parse_error = json_reader_get_error (reader)))
-                goto parse_test_init_error;
-            keys = json_reader_list_members (reader);
-            if ((parse_error = json_reader_get_error (reader)))
-                goto parse_test_init_error;
-            g_assert (keys);
-            for (j = 0; keys[j]; j++) {
-                key = keys[j];
-                /* Start init.keys.[].keyval or
-                 * tests.[].test1.commit.keys.[].keyval
-                 */
-                json_reader_read_member (reader, key);
-                if ((parse_error = json_reader_get_error (reader)))
-                    goto parse_test_init_error;
-                GET_TEST_INIT_VALUE(keyval)
-                else GET_TEST_INIT_VALUE(keycode)
-                else GET_TEST_INIT_VALUE(state)
-                else {
-                    g_warning ("Key %s should be keyval, keycode or state in "
-                               "'%s' JSON.", key, key_step);
-                }
-                /* End init.keys.[].keyval or
-                 * tests.[].test1.commit.keys.[].keyval
-                 */
+            retval->type = g_strdup ("strings");
+            retval->value.strings = strings;
+        } else if (!g_strcmp0 (key_type, "keys")) {
+            IBusCIKey *cikey = get_keys_from_json_reader (reader,
+                                                          key_step,
+                                                          error);
+            if (!cikey) {
                 json_reader_end_member (reader);
+                g_free (retval);
+                return NULL;
             }
-            /* End init.keys.[] or tests.[].test1.commit.keys.[] */
+            retval->type = g_strdup ("keys");
+            retval->value.keys = cikey;
+        } else if (!g_strcmp0 (key_type, "length")) {
+            retval->length = json_reader_get_int_value (reader);
+        } else {
+            if (error) {
+                g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
+                             "The key type should be 'string', 'strings', " \
+                             "'key' or 'length' but your type is '%s' in " \
+                             "'%s' JSON.",
+                             key_type, key_step);
+            }
             json_reader_end_element (reader);
-            cikey[i].keyval = keyval_str_to_val (keyval);
-            cikey[i].keycode = number_str_to_val (keycode);
-            cikey[i].state = state_str_to_val (state);
+            g_free (retval->type);
+            g_free (retval);
+            return NULL;
         }
-    } else {
-        if (error) {
-            g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
-                         "The key type should be 'string' or 'key' " \
-                         "but your type is '%s' in '%s' JSON.",
-                         key_type, key_step);
-        }
-        json_reader_end_element (reader);
-        g_free (retval->type);
-        g_free (retval);
-        return NULL;
+        /* End init.keys or tests.[].test1.commit.keys */
+        json_reader_end_member (reader);
     }
-    /* End init.keys or tests.[].test1.commit.keys */
-    json_reader_end_member (reader);
-
-#undef GET_TEST_INIT_VALUE
 
     return retval;
 
 parse_test_init_error:
     if (error)
         g_propagate_error (error, (GError *)parse_error);
-    if (retval && retval->type) {
-        if (!g_strcmp0 (retval->type, "string")) {
-            g_free (retval->type);
-            g_free (retval->value.string);
-        } else if (!g_strcmp0 (retval->type, "keys")) {
-            g_free (retval->type);
-            g_free (retval->value.keys);
-        }
-    }
+    g_free (retval->type);
+    g_free (retval->value.string);
     g_free (retval);
     return NULL;
 }

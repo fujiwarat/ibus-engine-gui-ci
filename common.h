@@ -36,6 +36,7 @@ struct _IBusCIKeySequence {
         char     **strings;
         IBusCIKey *keys;
     } value;
+    int length;
 };
 
 /**
@@ -45,6 +46,7 @@ struct _IBusCIKeySequence {
  *              allow keys.
  * @commit: Keys to commit the preedit text. Normally a Return or space key.
  * @result: Expected output. Normally a multibyte or singlebyte string.
+ * @false_str: Private usage.
  *
  * This is a test case and Each @IBusCITest is called by @IBusCICases.
  */
@@ -54,6 +56,7 @@ struct _IBusCITest {
     IBusCIKeySequence *conversion;
     IBusCIKeySequence *commit;
     IBusCIKeySequence *result;
+    GString *false_str;
 };
 
 /**

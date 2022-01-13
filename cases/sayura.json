@@ -1,0 +1,71 @@
+{
+  "//": "Copyright (C) 2021-2022 Takao Fujiwara <takao.fujiwara1@gmail.com>",
+  "//": "",
+  "//": "This library is free software; you can redistribute it and/or",
+  "//": "modify it under the terms of the GNU Lesser General Public",
+  "//": "License as published by the Free Software Foundation; either",
+  "//": "version 2.1 of the License, or (at your option) any later version.",
+  "//": "",
+  "//": "This library is distributed in the hope that it will be useful,",
+  "//": "but WITHOUT ANY WARRANTY; without even the implied warranty of",
+  "//": "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU",
+  "//": "Lesser General Public License for more details.",
+  "//": "",
+  "//": "You should have received a copy of the GNU Lesser General Public",
+  "//": "License along with this library; if not, write to the Free Software",
+  "//": "Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  ",
+  "//": "02110-1301 USA",
+  "//": "",
+  "//": "./autogen.sh --with-engine-name=ibus-sayura",
+  "//": "  --with-engine-casefile=sayura.json",
+  "//": "  --with-engine-srcfiles='engine.c engine.h'",
+  "//": "  --with-engine-srcfilesdir=BUILDDIR/ibus-sayura-1.3.2/src ",
+  "//": "  --with-engine-type='ibus_sinhala_engine_get_type()'",
+  "//": "",
+  "component": {
+    "name": "org.freedesktop.IBus.Sinhala.CI",
+    "description": "Sayura CI Component",
+    "version": "1.3.2",
+    "author": "Pravin Satpute &lt;pravin.d.s@gmail.com&gt;",
+    "license": "GPL",
+    "homepage": "https://github.com/ibus/ibus/wiki",
+    "textdomain": "ibus-sayura"
+  },
+  "engine": {
+    "name": "sayuraci",
+    "longname": "Sayura CI",
+    "description": "Sayura Input Method CI",
+    "language": "si",
+    "license": "GPL",
+    "author": "Pravin Satpute &lt;pravin.d.s@gmail.com&gt;",
+    "icon": "/usr/share/ibus-sayura/icons/ibus-sayura.png",
+    "layout": "us"
+  },
+  "init": {},
+  "tests": [
+    {
+      "test1": {
+        "preedit": { "string": "abc", "length": 7 },
+        "conversion": {},
+        "commit": { "keys":
+          [
+            { "keyval": "IBUS_KEY_space", "keycode": "0", "state": "0" }
+          ]
+        },
+        "result": { "strings": ["අ", "බ", "ච", " "] }
+      }
+    },
+    {
+      "test2": {
+        "preedit": { "string": "def", "length": 5 },
+        "conversion": {},
+        "commit": { "keys":
+          [
+            { "keyval": "IBUS_KEY_space", "keycode": "0", "state": "0" }
+          ]
+        },
+        "result": { "strings": ["දෙ", "ෆ", " "] }
+      }
+    }
+  ]
+}

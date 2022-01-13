@@ -39,7 +39,6 @@ extern GType IBUS_TYPE_ENGINE_CI;
 
 IBusBus *m_bus;
 IBusEngine *m_engine;
-IBusKeymap *m_keymap;
 
 static GOptionContext *option_context;
 static GOptionGroup *option_gtk;
@@ -172,6 +171,7 @@ create_engine_cb (IBusFactory *factory,
     return m_engine;
 }
 
+
 static gboolean
 register_ibus_engine (IBusEngineCIConfig *ciconfig)
 {
@@ -196,6 +196,7 @@ register_ibus_engine (IBusEngineCIConfig *ciconfig)
     return TRUE;
 }
 
+
 static gboolean
 finit (gpointer data)
 {
@@ -204,11 +205,16 @@ finit (gpointer data)
     return FALSE;
 }
 
+
 static int
 test_key_sequences_length (IBusCIKeySequence *sequence)
 {
     int len = 0;
     int i;
+
+    g_assert (sequence);
+    if (sequence->length >= 0)
+        return sequence->length;
     if (!g_strcmp0 (sequence->type, "string")) {
         len = strlen (sequence->value.string);
     } else if (!g_strcmp0 (sequence->type, "strings")) {
@@ -234,21 +240,23 @@ test_key_sequences_length (IBusCIKeySequence *sequence)
 
 static gboolean
 test_key_sequences_case (IBusCIKeySequence *sequence,
-                         const char        *desc)
+                         const char        *desc,
+                         GString          **false_str)
 {
     int len, i;
     int j = 0;
+    GString *false_chars = NULL;
 
     if (desc)
         g_test_message ("Start %s test\n", desc);
     if (!(len = test_key_sequences_length (sequence)))
         return FALSE;
+    false_chars = g_string_new ("");
     /* Run test cases */
     for (i = 0; i < len; i++) {
         guint keyval = 0;
         guint keycode = 0;
         guint state = 0;
-        gunichar ch;
         gboolean retval;
         if (!g_strcmp0 (sequence->type, "string")) {
             keyval = sequence->value.string[i];
@@ -273,9 +281,14 @@ test_key_sequences_case (IBusCIKeySequence *sequence,
             break;
         if (calc_keycode)
             keycode = calculate_keycode_from_keyval (keyval);
-        ch = ibus_keyval_to_unicode (keyval);
         g_signal_emit_by_name (m_engine, "process-key-event",
                                keyval, keycode, state, &retval);
+        if (!retval && false_str) {
+            gunichar ch = ibus_keyval_to_unicode (keyval);
+            if (!(*false_str))
+              *false_str  = g_string_new ("");
+            g_string_append_unichar (*false_str, ch);
+        }
         state |= IBUS_RELEASE_MASK;
         sleep(1);
         g_signal_emit_by_name (m_engine, "process-key-event",
@@ -294,7 +307,7 @@ enable_ime (IBusEngineCIConfig *ciconfig)
     g_return_val_if_fail (ciconfig, FALSE);
     if (!(init = ibus_engine_ci_config_get_init (ciconfig)))
         return FALSE;
-    return test_key_sequences_case (init, "init");
+    return test_key_sequences_case (init, "init", NULL);
 }
 
 
@@ -322,6 +335,8 @@ ciengine_focus_in_cb (IBusEngine *engine,
 {
     IBusEngineCIConfig *ciconfig = (IBusEngineCIConfig *)data;
     IBusCITest *tests;
+    g_autoptr(GString) init_false_str = NULL;
+    g_autoptr(GString) preedit_false_str = NULL;
     g_autofree gchar *desc = NULL;
 
     if (g_test_verbose ())
@@ -340,7 +355,9 @@ ciengine_focus_in_cb (IBusEngine *engine,
     tests = ibus_engine_ci_config_get_tests (ciconfig);
     g_assert (tests);
     desc = g_strdup_printf ("%s preedit", tests[test_index].desc);
-    test_key_sequences_case (tests[test_index].preedit, desc);
+    test_key_sequences_case (tests[test_index].preedit,
+                             desc,
+                             &tests[test_index].false_str);
 }
 
 
@@ -427,7 +444,9 @@ entry_preedit_changed_cb (GtkWidget  *entry,
     if (len != num_preedit_changes)
         return;
     desc = g_strdup_printf ("%s commit", tests[test_index].desc);
-    test_key_sequences_case (tests[test_index].commit, desc);
+    test_key_sequences_case (tests[test_index].commit,
+                             desc,
+                             &tests[test_index].false_str);
     return;
 }
 
@@ -486,7 +505,18 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
     g_print ("%05d %s expected: \"%s\" typed: \"%s\"\n",
              test_index + 1, test, expected, chars);
     if (wait_next_commit_text) {
-         return;
+        if (!tests[test_index].result->value.strings[result_index + 1] &&
+            tests[test_index].false_str) {
+            GString *false_str = tests[test_index].false_str;
+            buffer_inserted_text_cb (buffer,
+                                     position,
+                                     false_str->str,
+                                     false_str->len,
+                                     data);
+            g_string_free (false_str, TRUE);
+            tests[test_index].false_str = NULL;
+        }
+        return;
     } else {
          ++test_index;
          result_index = 0;
@@ -509,7 +539,9 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
     gtk_entry_set_text (entry, "");
     num_preedit_changes = 0;
     desc = g_strdup_printf ("%s preedit", tests[test_index].desc);
-    test_key_sequences_case (preedit, desc);
+    test_key_sequences_case (preedit,
+                             desc,
+                             &tests[test_index].false_str);
 }
 
 static void
@@ -572,7 +604,6 @@ main (int argc, char *argv[])
     IBusEngineCIConfig *ciconfig;
     char *test_path;
 
-    //sleep (10);
     /* Run test cases with X Window. */
     g_setenv ("GDK_BACKEND", "x11", TRUE);
 
@@ -623,8 +654,6 @@ main (int argc, char *argv[])
                                test_engine_ci,
                                g_object_unref);
     g_free (test_path);
-
-    //keymap = ibus_keymap_get("us");
 
     return g_test_run ();
 }

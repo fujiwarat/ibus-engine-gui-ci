@@ -25,4 +25,5 @@ test_sourcesdir = $(datadir)/installed-tests/@ENGINE_NAME@
 EXTRA_DIST = \
     ascii.json \
     hangul.json \
+    sayura.json \
     $(NULL)

@@ -52,7 +52,7 @@
     "layout_variant": "kr104"
   },
   "init": { "keys":
-    [ 
+    [
       { "keyval": "IBUS_KEY_Hangul", "keycode": "122", "state": "0" }
     ]
   },
