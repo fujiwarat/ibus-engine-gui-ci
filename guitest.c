@@ -31,8 +31,6 @@
 #include "common.h"
 #include "ciconfig.h"
 
-extern GType IBUS_TYPE_ENGINE_CI;
-
 #define GREEN "\033[0;32m"
 #define RED   "\033[0;31m"
 #define NC    "\033[0m"
@@ -289,6 +287,10 @@ test_key_sequences_case (IBusCIKeySequence *sequence,
               *false_str  = g_string_new ("");
             g_string_append_unichar (*false_str, ch);
         }
+        if (g_test_verbose ()) {
+            g_printerr ("process_key_event U+%04X U+%04X u+%04X %s\n",
+                        keyval, keycode, state, retval ? "TRUE" : "FALSE");
+        }
         state |= IBUS_RELEASE_MASK;
         sleep(1);
         g_signal_emit_by_name (m_engine, "process-key-event",
@@ -487,6 +489,7 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
     g_return_if_fail (IBUS_IS_ENGINE_CI_CONFIG (ciconfig));
     tests = ibus_engine_ci_config_get_tests (ciconfig);
     g_assert (tests);
+    g_assert (tests[test_index].result);
     if (!g_strcmp0 (tests[test_index].result->type, "string")) {
         expected = tests[test_index].result->value.string;
     } else if (!g_strcmp0 (tests[test_index].result->type, "strings")) {
