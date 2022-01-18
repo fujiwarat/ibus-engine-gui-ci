@@ -122,6 +122,18 @@ AC_ARG_WITH(engine-type,
 AC_DEFINE_UNQUOTED(IBUS_TYPE_ENGINE_CI, $ENGINE_TYPE,
                    [an engine GType in external ENGINE_SRCFILES])
 
+AC_ARG_WITH(engine-type-header,
+            [AC_HELP_STRING([--with-engine-type-header=HEADER.h],
+                            [A HEADER.h file included by CI sources. default is engine.h])],
+            [ENGINE_TYPE_H="$withval"],
+            [ENGINE_TYPE_H='engine.h'])
+if test "x$ENGINE_TYPE_H" != "x" ; then
+AC_DEFINE_UNQUOTED(HAVE_ENGINE_TYPE_H, 1,
+                   [If ENGINE_TYPE_HEADER is used])
+AC_DEFINE_UNQUOTED(ENGINE_TYPE_H_STR, "$ENGINE_TYPE_H",
+                   [A HEADER.h file included by CI sources])
+fi
+
 AC_ARG_WITH(engine-init,
             [AC_HELP_STRING([--with-engine-init=FUNC(bus)],
                     [external engine init FUNC(bus). default is (bus)])],
@@ -163,6 +175,7 @@ ENGINE_CASEFILE             $ENGINE_CASEFILE
 ENGINE_SRCFILES             $ENGINE_SRCFILES
 ENGINE_SRCFILESDIR          $ENGINE_SRCFILESDIR
 ENGINE_TYPE                 $ENGINE_TYPE
+ENGINE_TYPE_H               $ENGINE_TYPE_H
 ENGINE_INIT                 $ENGINE_INIT
 ENGINE_CFLAGS               $ENGINE_CFLAGS
 ENGINE_LIBS                 $ENGINE_LIBS

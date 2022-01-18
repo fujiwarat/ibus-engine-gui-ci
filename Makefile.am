@@ -73,6 +73,7 @@ ibus_engine_gui_ci_LDADD = \
 
 EXTRA_DIST = \
     $(test_metas_in) \
+    autogen.sh \
     enginetmpl.c \
     enginetmpl.h \
     keystrtoval.h \
@@ -100,11 +101,13 @@ $(test_metas): $(test_metas_in) $(test_programs)
 
 @ENGINE_SRCFILES@:
 	if test "x$(ENGINE_SRCFILESDIR)" = "x$(srcdir)" ; then \
-	    cp -p enginetmpl.c engine.c; \
-	    cp -p enginetmpl.h engine.h; \
+	    cp enginetmpl.c engine.c; \
+	    cp enginetmpl.h engine.h; \
+	    chmod u+rw engine.c engine.h; \
 	elif test -f  @ENGINE_SRCFILESDIR@/$@ ; then \
 	    for f in @ENGINE_SRCFILES@ ; do \
-	        cp -p @ENGINE_SRCFILESDIR@/$$f .; \
+	        cp @ENGINE_SRCFILESDIR@/$$f .; \
+	        chmod u+rw $$f; \
 	    done; \
 	else \
 	    abrt; \

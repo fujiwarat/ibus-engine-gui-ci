@@ -13,8 +13,11 @@ BuildRoot:  %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  glib2
 BuildRequires:  ibus-devel              >= %ibus_version
+BuildRequires:  json-glib-devel
 BuildRequires:  libtool
+BuildRequires:  make
 Requires:       ibus
+Recommends:     ibus-desktop-testing
 
 %description
 GUI CI can run with ibus-desktop-testing-runner and engines get
@@ -25,6 +28,7 @@ focus events with the window manager.
 
 %build
 %configure --disable-static
+make clean
 make %{?_smp_mflags}
 
 %install
@@ -33,8 +37,8 @@ make install DESTDIR=$RPM_BUILD_ROOT INSTALL='install -p'
 %files -f %{name}.lang
 %defattr(-,root,root,-)
 %doc AUTHORS COPYING README.md
-%{_libexecdir}/installed-tests/ibus-engine
-%{_datadir}/installed-tests/ibus-engine
+%{_libexecdir}/installed-tests/%{name}
+%{_datadir}/installed-tests/%{name}
 
 %changelog
 * @DATE_DISPLAY@ Takao Fujiwara <takao.fujiwara1@gmail.com> - @PACKAGE_VERSION@-1

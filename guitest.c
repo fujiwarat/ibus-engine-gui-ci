@@ -31,6 +31,10 @@
 #include "common.h"
 #include "ciconfig.h"
 
+#ifdef HAVE_ENGINE_TYPE_H
+#include ENGINE_TYPE_H_STR
+#endif
+
 #define GREEN "\033[0;32m"
 #define RED   "\033[0;31m"
 #define NC    "\033[0m"
@@ -195,15 +199,6 @@ register_ibus_engine (IBusEngineCIConfig *ciconfig)
 }
 
 
-static gboolean
-finit (gpointer data)
-{
-    g_test_incomplete ("time out");
-    gtk_main_quit ();
-    return FALSE;
-}
-
-
 static int
 test_key_sequences_length (IBusCIKeySequence *sequence)
 {
@@ -243,13 +238,11 @@ test_key_sequences_case (IBusCIKeySequence *sequence,
 {
     int len, i;
     int j = 0;
-    GString *false_chars = NULL;
 
     if (desc)
         g_test_message ("Start %s test\n", desc);
     if (!(len = test_key_sequences_length (sequence)))
         return FALSE;
-    false_chars = g_string_new ("");
     /* Run test cases */
     for (i = 0; i < len; i++) {
         guint keyval = 0;
@@ -259,7 +252,6 @@ test_key_sequences_case (IBusCIKeySequence *sequence,
         if (!g_strcmp0 (sequence->type, "string")) {
             keyval = sequence->value.string[i];
         } else if (!g_strcmp0 (sequence->type, "strings")) {
-            const char *string;
             if (!sequence->value.strings[j])
                 break;
             if (!sequence->value.strings[j][i]) {
@@ -303,7 +295,6 @@ test_key_sequences_case (IBusCIKeySequence *sequence,
 static gboolean
 enable_ime (IBusEngineCIConfig *ciconfig)
 {
-    int i;
     IBusCIKeySequence *init;
 
     g_return_val_if_fail (ciconfig, FALSE);
@@ -317,7 +308,6 @@ static void
 set_engine_cb (GObject *object, GAsyncResult *res, gpointer data)
 {
     IBusBus *bus = IBUS_BUS (object);
-    GtkWidget *entry = GTK_WIDGET (data);
     g_autoptr(GError) error = NULL;
 
     if (g_test_verbose ())
@@ -470,7 +460,7 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
     IBusEngineCIConfig *ciconfig;
     IBusCITest *tests;
     gboolean valid_output = TRUE;
-    const char *expected;
+    const char *expected = "";
     gboolean wait_next_commit_text = FALSE;
     const char *test;
     IBusCIKeySequence *preedit;
@@ -531,7 +521,6 @@ buffer_inserted_text_cb (GtkEntryBuffer *buffer,
                 entry,
                 G_CALLBACK (entry_focus_in_event_cb),
                 NULL);
-        //g_timeout_add_seconds (10, finit, NULL);
         gtk_main_quit ();
         return;
     }

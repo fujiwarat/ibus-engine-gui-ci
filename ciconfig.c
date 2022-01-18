@@ -110,7 +110,6 @@ ibus_engine_ci_config_init (IBusEngineCIConfig *self)
 static void
 ibus_enigne_ci_config_finalize (GObject *object)
 {
-    IBusEngineCIConfig *self = (IBusEngineCIConfig *)object;
     G_OBJECT_CLASS (ibus_engine_ci_config_parent_class)->finalize (object);
 }
 
@@ -688,10 +687,6 @@ ibus_test_tests_new_from_json_reader (JsonReader *reader,
     const char *case_name;
     g_autofree gchar **step_names = NULL;
     const char *step_name;
-    const char *preedit;
-    const char *conversion;
-    const char *commit;
-    const char *result;
     g_autofree gchar *key_step = NULL;
     IBusCIKeySequence *cisequence;
 
@@ -718,9 +713,8 @@ ibus_test_tests_new_from_json_reader (JsonReader *reader,
     }
     if (!(citest = g_new0 (IBusCITest, ntests + 1))) {
         if (error) {
-            g_set_error (error, IBUS_ERROR, IBUS_ERROR_FAILED,
-                         "Failed to alloc IBusCITest in 'tests' JSON.",
-                         key_step);
+            g_set_error_literal (error, IBUS_ERROR, IBUS_ERROR_FAILED,
+                                 "Failed to alloc IBusCITest in 'tests' JSON.");
         }
         return NULL;
     }
